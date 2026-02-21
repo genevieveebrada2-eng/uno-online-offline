@@ -3,18 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UNO – Multiplayer</title>
+<title>UNO – Animated Multiplayer</title>
 <style>
 body { font-family: Arial,sans-serif; background:#2c3e50; color:white; text-align:center; margin:0; padding:0; }
 .container { max-width:1200px; margin:auto; padding:10px; }
 h1 { color:#e74c3c; }
 #gameArea { display:none; margin-top:20px; }
 #players { display:flex; justify-content:space-around; flex-wrap:wrap; margin-bottom:10px; }
-.player { background:#34495e; padding:10px; border-radius:10px; min-width:120px; }
-.hand { display:flex; justify-content:center; margin-top:10px; flex-wrap:wrap; }
-.card { width:60px; height:90px; margin:2px; cursor:pointer; transition:transform 0.3s; }
-.card:hover { transform:scale(1.2) rotate(10deg); }
-#pile, #discard { width:60px; height:90px; margin:5px; display:inline-block; vertical-align:top; }
+.player { background:#34495e; padding:10px; border-radius:10px; min-width:120px; position:relative; transition:all 0.3s; }
+.player.active { box-shadow: 0 0 15px #f1c40f; transform: scale(1.05); }
+.player .count { font-size:14px; color:#ecf0f1; margin-top:5px; }
+.hand { display:flex; justify-content:center; margin-top:10px; flex-wrap:nowrap; overflow-x:auto; position:relative; height:110px; }
+.card { width:60px; height:90px; margin:2px; cursor:pointer; transition: transform 0.3s, top 0.3s, left 0.3s; position:absolute; }
+#pile, #discard { width:60px; height:90px; margin:5px; display:inline-block; vertical-align:top; position:relative; }
 #controls { margin-top:20px; }
 #chatBox { height:150px; overflow-y:auto; background:#ecf0f1; color:black; padding:5px; border-radius:5px; text-align:left; }
 #msgInput { width:70%; padding:5px; border-radius:5px; border:none; }
@@ -25,7 +26,7 @@ h1 { color:#e74c3c; }
 </head>
 <body>
 <div class="container">
-<h1>UNO – Online & Offline Multiplayer</h1>
+<h1>UNO – Animated Multiplayer</h1>
 
 <div id="joinBox">
 <input id="nameInput" placeholder="Your name"><br><br>
@@ -36,7 +37,7 @@ h1 { color:#e74c3c; }
 
 <div id="gameArea">
 <div id="players"></div>
-<div>
+<div style="margin:10px;">
 <div id="pile"></div>
 <div id="discard"></div>
 </div>
@@ -49,7 +50,7 @@ h1 { color:#e74c3c; }
 </div>
 </div>
 
-<!-- Firebase -->
+<!-- Firebase & Confetti -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
@@ -77,30 +78,15 @@ const maxPlayers=10;
 
 // ------------------- UNO CARDS -------------------
 const colors = ['Red','Green','Blue','Yellow'];
-const numbers = [...Array(10).keys()]; // 0-9
+const numbers = [...Array(10).keys()];
 const specials = ['Skip','Reverse','DrawTwo'];
 const wilds = ['Wild','Wild_DrawFour'];
 const cardURLs = {};
 const baseURL = 'https://raw.githubusercontent.com/john-costanzo/uno-card-images/master/';
 
-// Number cards
-colors.forEach(c => {
-  numbers.forEach(n => {
-    cardURLs[`${c.toLowerCase()}_${n}`] = `${baseURL}${c}_${n}.png`;
-  });
-});
-
-// Special cards
-colors.forEach(c => {
-  specials.forEach(s => {
-    cardURLs[`${c.toLowerCase()}_${s.toLowerCase()}`] = `${baseURL}${c}_${s}.png`;
-  });
-});
-
-// Wild cards
-wilds.forEach(w => {
-  cardURLs[w.toLowerCase()] = `${baseURL}${w}.png`;
-});
+colors.forEach(c => { numbers.forEach(n => { cardURLs[`${c.toLowerCase()}_${n}`] = `${baseURL}${c}_${n}.png`; }); });
+colors.forEach(c => { specials.forEach(s => { cardURLs[`${c.toLowerCase()}_${s.toLowerCase()}`] = `${baseURL}${c}_${s}.png`; }); });
+wilds.forEach(w => { cardURLs[w.toLowerCase()] = `${baseURL}${w}.png`; });
 
 // ------------------- DOM -------------------
 const joinBox=document.getElementById('joinBox');
@@ -116,136 +102,86 @@ const msgInput=document.getElementById('msgInput');
 const playSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-retro-game-notification-212.mp3');
 const winSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
 
-// ------------------- ONLINE -------------------
-function startOnline(){
-  isOffline=false;
-  playerName=document.getElementById('nameInput').value||'Player';
-  roomCode=document.getElementById('roomInput').value||'room-'+Date.now();
-  firebase.auth().signInAnonymously().then(()=>{
-    playerId=firebase.auth().currentUser.uid;
-    db.ref('rooms/'+roomCode+'/players/'+playerId).set({name:playerName,hand:[],online:true});
-    joinBox.style.display='none';
-    gameArea.style.display='block';
-    listenRoom();
-  });
-}
-
-function listenRoom(){
-  db.ref('rooms/'+roomCode).on('value',snap=>{
-    const data=snap.val();
-    if(!data) return;
-    const players=Object.values(data.players||{});
-    renderPlayers(players);
-    updateHand(players.find(p=>p.name===playerName)?.hand||[]);
-    renderDiscard(data.discardPile||[]);
-    renderPile(data.pile||[]);
-    renderChat(data.chat||{});
-  });
-}
-
-// ------------------- OFFLINE -------------------
-function startOffline(){
-  isOffline=true;
-  joinBox.style.display='none';
-  gameArea.style.display='block';
-  offlinePlayers=[];
-  const names=prompt("Enter player names separated by comma:","Player1,Player2,Player3").split(",");
-  names.forEach(n=>offlinePlayers.push({name:n.trim(),hand:[]}));  
-  dealOffline();
-  renderPlayers(offlinePlayers);
-  renderHand();
-}
-
-// ------------------- CARD HELPERS -------------------
-function randomCard(){
-  const color=colors[Math.floor(Math.random()*4)];
-  const num=numbers[Math.floor(Math.random()*10)];
-  return {type:'number',color,num};
-}
-function getCardURL(card){
-  if(!card) return '';
-  if(card.type==='wild') return cardURLs[card.wild.toLowerCase()];
-  return cardURLs[card.color.toLowerCase()+'_'+(card.type==='number'?card.num:card.special.toLowerCase())]||'';
-}
+// ------------------- HELPER -------------------
+function randomCard(){ const color=colors[Math.floor(Math.random()*4)]; const num=numbers[Math.floor(Math.random()*10)]; return {type:'number',color,num}; }
+function getCardURL(card){ if(!card) return ''; if(card.type==='wild') return cardURLs[card.wild.toLowerCase()]; return cardURLs[card.color.toLowerCase()+'_'+(card.type==='number'?card.num:card.special.toLowerCase())]||''; }
+function fannedHand(cards){ const width = handDiv.clientWidth; const spread = Math.min(20, width/cards.length); return cards.map((c,i)=>({card:c,left:i*spread})); }
 
 // ------------------- RENDER -------------------
 function renderPlayers(players){
   playersDiv.innerHTML='';
   players.forEach((p,i)=>{
     const div=document.createElement('div');
-    div.className='player';
-    div.innerText=p.name+(i==turn?' 🔹':'');
+    div.className='player'+(i==turn?' active':'');
+    div.innerHTML=`${p.name}<div class="count">${p.hand.length} cards</div>`;
     playersDiv.appendChild(div);
   });
 }
 
-function updateHand(cards){ hand=cards; renderHand(); }
 function renderHand(){
   handDiv.innerHTML='';
-  hand.forEach((card,i)=>{
+  const fanned=fannedHand(hand);
+  fanned.forEach((obj,i)=>{
     const img=document.createElement('img');
-    img.src=getCardURL(card);
+    img.src=getCardURL(obj.card);
     img.className='card';
+    img.style.left=obj.left+'px';
     img.onclick=()=>playCard(i);
     handDiv.appendChild(img);
   });
 }
 
-function renderPile(cards){
-  pileDiv.innerHTML='<img src="https://upload.wikimedia.org/wikipedia/commons/5/5a/UNO_card_back.png" class="card">';
-}
-
-function renderDiscard(cards){
-  discardDiv.innerHTML='';
-  if(cards.length==0) return;
-  const top=cards[cards.length-1];
-  const img=document.createElement('img');
-  img.src=getCardURL(top);
-  img.className='card';
-  discardDiv.appendChild(img);
-}
-
-function renderChat(chat){
-  chatBox.innerHTML='';
-  Object.values(chat||{}).forEach(c=>{
-    chatBox.innerHTML+=`<div><b>${c.player}:</b> ${c.msg}</div>`;
-  });
-  chatBox.scrollTop=chatBox.scrollHeight;
-}
+function renderPile(){ pileDiv.innerHTML='<img src="https://upload.wikimedia.org/wikipedia/commons/5/5a/UNO_card_back.png" class="card">'; }
+function renderDiscard(){ discardDiv.innerHTML=''; if(discardPile.length==0) return; const top=discardPile[discardPile.length-1]; const img=document.createElement('img'); img.src=getCardURL(top); img.className='card'; discardDiv.appendChild(img); }
 
 // ------------------- PLAY CARD -------------------
 function playCard(idx){
   const card=hand[idx];
   hand.splice(idx,1);
-  renderHand();
   discardPile.push(card);
-  renderDiscard(discardPile);
-  confetti({particleCount:50, spread:70});
-  playSound.play();
+  animateCardToDiscard(idx,card);
   checkWin();
+  nextTurn(card);
 }
 
-// ------------------- OFFLINE DEAL -------------------
-function dealOffline(){
-  offlinePlayers.forEach(p=>{
-    for(let i=0;i<7;i++) p.hand.push(randomCard());
-    if(p.name===offlinePlayers[offlineTurn].name) hand=p.hand;
-  });
+// ------------------- ANIMATION -------------------
+function animateCardToDiscard(idx,card){
+  const imgs=handDiv.getElementsByTagName('img');
+  const img=imgs[idx];
+  const rect=discardDiv.getBoundingClientRect();
+  const handRect=img.getBoundingClientRect();
+  const dx=rect.left-handRect.left;
+  const dy=rect.top-handRect.top;
+  img.style.transition='transform 0.5s';
+  img.style.transform=`translate(${dx}px,${dy}px) rotate(20deg)`;
+  setTimeout(()=>{ renderHand(); renderDiscard(); playSound.play(); },500);
+}
+
+// ------------------- TURN LOGIC -------------------
+function nextTurn(card){
+  if(card.special==='reverse') direction*=-1;
+  turn=(turn+direction+offlinePlayers.length)%offlinePlayers.length;
+  renderPlayers(offlinePlayers);
+}
+
+// ------------------- OFFLINE START -------------------
+function startOffline(){
+  isOffline=true; joinBox.style.display='none'; gameArea.style.display='block';
+  offlinePlayers=[];
+  const names=prompt("Enter player names separated by comma:","Player1,Player2,Player3").split(",");
+  names.forEach(n=>offlinePlayers.push({name:n.trim(),hand:[]}));  
+  offlinePlayers.forEach(p=>{ for(let i=0;i<7;i++) p.hand.push(randomCard()); });
+  hand=offlinePlayers[offlineTurn].hand;
   pile=[...Array(50)].map(()=>randomCard());
   discardPile=[pile.pop()];
-  renderPile(pile);
-  renderDiscard(discardPile);
+  renderPlayers(offlinePlayers); renderHand(); renderPile(); renderDiscard();
 }
 
 // ------------------- CHAT -------------------
 function sendMsg(){
   const msg=msgInput.value;
   if(!msg) return;
-  if(isOffline){
-    chatBox.innerHTML+=`<div><b>${offlinePlayers[offlineTurn].name}:</b> ${msg}</div>`;
-  } else {
-    db.ref('rooms/'+roomCode+'/chat').push({player:playerName,msg});
-  }
+  chatBox.innerHTML+=`<div><b>${offlinePlayers[offlineTurn].name}:</b> ${msg}</div>`;
   msgInput.value='';
   chatBox.scrollTop=chatBox.scrollHeight;
 }
@@ -254,13 +190,12 @@ function sendMsg(){
 function checkWin(){
   if(hand.length===0){
     winSound.play();
-    const msg=document.createElement('div');
-    msg.className='special-msg';
-    msg.innerText='🎉 You win, baby! 🎉';
+    const msg=document.createElement('div'); msg.className='special-msg';
+    msg.innerText='🎉 You win! 🎉';
     gameArea.appendChild(msg);
-    confetti({particleCount:200, spread:100});
+    confetti({particleCount:200,spread:100});
   }
 }
 </script>
 </body>
-</html>
+  </html>
