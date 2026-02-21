@@ -3,61 +3,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UNO – Animated Multiplayer</title>
+<title>UNO Online – Upgraded Deployable</title>
 <style>
-body { font-family: Arial,sans-serif; background:#2c3e50; color:white; text-align:center; margin:0; padding:0; }
-.container { max-width:1200px; margin:auto; padding:10px; }
-h1 { color:#e74c3c; }
-#gameArea { display:none; margin-top:20px; }
-#players { display:flex; justify-content:space-around; flex-wrap:wrap; margin-bottom:10px; }
-.player { background:#34495e; padding:10px; border-radius:10px; min-width:120px; position:relative; transition:all 0.3s; }
-.player.active { box-shadow: 0 0 15px #f1c40f; transform: scale(1.05); }
-.player .count { font-size:14px; color:#ecf0f1; margin-top:5px; }
-.hand { display:flex; justify-content:center; margin-top:10px; flex-wrap:nowrap; overflow-x:auto; position:relative; height:110px; }
-.card { width:60px; height:90px; margin:2px; cursor:pointer; transition: transform 0.3s, top 0.3s, left 0.3s; position:absolute; }
-#pile, #discard { width:60px; height:90px; margin:5px; display:inline-block; vertical-align:top; position:relative; }
-#controls { margin-top:20px; }
-#chatBox { height:150px; overflow-y:auto; background:#ecf0f1; color:black; padding:5px; border-radius:5px; text-align:left; }
-#msgInput { width:70%; padding:5px; border-radius:5px; border:none; }
-#sendBtn { padding:5px 10px; border-radius:5px; border:none; background:#e74c3c; color:white; cursor:pointer; }
-.special-msg { font-size:24px; font-weight:bold; color:#ff69b4; position:absolute; width:100%; top:50px; left:0; animation:fadeOut 3s forwards; }
-@keyframes fadeOut { 0%{opacity:1;}100%{opacity:0;} }
+body{margin:0;background:#0f1c2e;color:#fff;font-family:system-ui}
+.container{max-width:600px;margin:auto;padding:10px}
+h1{text-align:center;color:#ff5252;font-size:22px}
+
+#joinBox input,#joinBox button{padding:10px;margin:5px;border-radius:8px;border:none;width:48%}
+#joinBox button{background:#ff5252;color:white;cursor:pointer}
+
+#table{display:flex;flex-direction:column;height:60vh;justify-content:space-between;margin-top:10px}
+#middleRow{display:flex;justify-content:space-between;align-items:center}
+
+.table-player{background:#1f2f46;padding:6px;border-radius:10px;width:70px;text-align:center;font-size:10px;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;transition:0.3s}
+.table-player.active{box-shadow:0 0 12px gold;transform:scale(1.05)}
+.table-player img{width:40px;height:40px;border-radius:50%;margin-bottom:2px}
+
+.hand{display:flex;justify-content:center;overflow-x:auto;padding:5px;transition:all .3s}
+.card{width:50px;height:75px;margin:2px;cursor:pointer;transition:.3s;position:relative}
+.card.fan{transform-origin:bottom center}
+.card:hover{transform:scale(1.1) rotate(0deg)}
+
+#pile img,#discard img{width:50px;height:75px;transition:all .5s;cursor:pointer}
+
+#wildPicker{display:none;justify-content:center;margin-top:5px}
+#wildPicker button{width:30px;height:30px;border-radius:50%;border:none;margin:5px;cursor:pointer}
+
+#hud{display:flex;justify-content:space-between;align-items:center;margin-top:5px}
+#scoreboard{font-size:12px}
+#chatBox{background:white;color:black;height:100px;overflow:auto;border-radius:8px;padding:5px;margin-top:5px}
+#msgInput{width:75%;padding:5px;border-radius:5px;border:none}
+#chatPanel button{width:20%;padding:5px;border:none;background:#ff5252;color:white;border-radius:5px;cursor:pointer}
+
+.joinMsg{position:fixed;top:20%;width:100%;text-align:center;font-size:18px;animation:fadeUp 2s forwards}
+@keyframes fadeUp{to{opacity:0; transform:translateY(-40px)}}
+
+#unoAnim {position:absolute;display:none;font-size:32px;color:#ff0;text-shadow:0 0 10px red;animation:pop .8s ease}
+@keyframes pop{0%{transform:scale(0)}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>UNO – Animated Multiplayer</h1>
+<h1>UNO Online – Upgraded</h1>
 
 <div id="joinBox">
-<input id="nameInput" placeholder="Your name"><br><br>
-<input id="roomInput" placeholder="Room code (online only)"><br><br>
-<button onclick="startOnline()">Join Online Room</button>
-<button onclick="startOffline()">Play Offline</button>
+  <input id="nameInput" placeholder="Your name" />
+  <input id="roomInput" placeholder="Room code (optional)" />
+  <br>
+  <button onclick="startOnline()">Play Online</button>
+  <button onclick="startOffline()">Play Offline</button>
 </div>
 
-<div id="gameArea">
-<div id="players"></div>
-<div style="margin:10px;">
-<div id="pile"></div>
-<div id="discard"></div>
-</div>
-<div class="hand" id="hand"></div>
-<div id="controls">
-<input id="msgInput" placeholder="Chat...">
-<button id="sendBtn" onclick="sendMsg()">Send</button>
-<div id="chatBox"></div>
-</div>
-</div>
+<div id="gameArea" style="display:none">
+  <div id="table">
+    <div id="topPlayers" style="display:flex;justify-content:space-between;margin-bottom:5px"></div>
+    <div id="middleRow">
+      <div id="leftPlayers" style="display:flex;flex-direction:column;justify-content:space-between"></div>
+      <div id="centerTable">
+        <div id="pile" onclick="drawCard()"></div>
+        <div id="discard"></div>
+        <div id="wildPicker">
+          <button onclick="pickColor('Red')" style="background:red"></button>
+          <button onclick="pickColor('Green')" style="background:green"></button>
+          <button onclick="pickColor('Blue')" style="background:blue"></button>
+          <button onclick="pickColor('Yellow')" style="background:gold"></button>
+        </div>
+      </div>
+      <div id="rightPlayers" style="display:flex;flex-direction:column;justify-content:space-between"></div>
+    </div>
+    <div id="hand" class="hand"></div>
+  </div>
+
+  <div id="hud">
+    <button onclick="callUNO()">UNO!</button>
+    <div id="scoreboard"></div>
+  </div>
+
+  <div id="chatPanel">
+    <input id="msgInput" placeholder="Chat..." />
+    <button onclick="sendMsg()">Send</button>
+    <div id="chatBox"></div>
+  </div>
+
+  <div id="badges"></div>
 </div>
 
-<!-- Firebase & Confetti -->
+<div id="unoAnim">UNO!</div>
+</div>
+
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
+<!-- Sound Effects -->
+<audio id="sndPlay" src="https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.wav"></audio>
+<audio id="sndDraw" src="https://assets.mixkit.co/sfx/preview/mixkit-paper-slide-1530.wav"></audio>
+<audio id="sndUNO"  src="https://assets.mixkit.co/sfx/preview/mixkit-game-level-completed-2059.wav"></audio>
+
 <script>
-// ------------------- CONFIG -------------------
+// Firebase Config
 const firebaseConfig = {
   apiKey: "AIzaSyBna-Ul3PbjkDrUtFtTU3rDaCl4PVnw4Mg",
   authDomain: "uno-multiplayer-e7d24.firebaseapp.com",
@@ -69,133 +114,194 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ------------------- VARIABLES -------------------
-let isOffline=false;
-let roomCode, playerName, playerId;
-let hand=[], pile=[], discardPile=[], turn=0, direction=1;
-let offlinePlayers=[], offlineTurn=0;
-const maxPlayers=10;
+// Game data
+const baseURL="https://raw.githubusercontent.com/john-costanzo/uno-card-images/master/";
+const colors=["Red","Green","Blue","Yellow"];
+const specials=["Skip","Reverse","DrawTwo"];
+const avatars=[...Array(10)].map((_,i)=>`https://i.pravatar.cc/50?img=${i+1}`);
+let players={}, hand=[], pile=[], discard=[];
+let isOffline=true, turn=0, dir=1, mustDraw=0, unoCalled=false;
+let myId, roomRef;
+const winningScore=500;
 
-// ------------------- UNO CARDS -------------------
-const colors = ['Red','Green','Blue','Yellow'];
-const numbers = [...Array(10).keys()];
-const specials = ['Skip','Reverse','DrawTwo'];
-const wilds = ['Wild','Wild_DrawFour'];
-const cardURLs = {};
-const baseURL = 'https://raw.githubusercontent.com/john-costanzo/uno-card-images/master/';
+// DOM refs
+const handDiv=document.getElementById("hand");
+const discardDiv=document.getElementById("discard");
+const pileDiv=document.getElementById("pile");
+const scoreboard=document.getElementById("scoreboard");
+const chatBox=document.getElementById("chatBox");
+const badgesDiv=document.getElementById("badges");
 
-colors.forEach(c => { numbers.forEach(n => { cardURLs[`${c.toLowerCase()}_${n}`] = `${baseURL}${c}_${n}.png`; }); });
-colors.forEach(c => { specials.forEach(s => { cardURLs[`${c.toLowerCase()}_${s.toLowerCase()}`] = `${baseURL}${c}_${s}.png`; }); });
-wilds.forEach(w => { cardURLs[w.toLowerCase()] = `${baseURL}${w}.png`; });
-
-// ------------------- DOM -------------------
-const joinBox=document.getElementById('joinBox');
-const gameArea=document.getElementById('gameArea');
-const playersDiv=document.getElementById('players');
-const handDiv=document.getElementById('hand');
-const pileDiv=document.getElementById('pile');
-const discardDiv=document.getElementById('discard');
-const chatBox=document.getElementById('chatBox');
-const msgInput=document.getElementById('msgInput');
-
-// ------------------- SOUNDS -------------------
-const playSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-retro-game-notification-212.mp3');
-const winSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
-
-// ------------------- HELPER -------------------
-function randomCard(){ const color=colors[Math.floor(Math.random()*4)]; const num=numbers[Math.floor(Math.random()*10)]; return {type:'number',color,num}; }
-function getCardURL(card){ if(!card) return ''; if(card.type==='wild') return cardURLs[card.wild.toLowerCase()]; return cardURLs[card.color.toLowerCase()+'_'+(card.type==='number'?card.num:card.special.toLowerCase())]||''; }
-function fannedHand(cards){ const width = handDiv.clientWidth; const spread = Math.min(20, width/cards.length); return cards.map((c,i)=>({card:c,left:i*spread})); }
-
-// ------------------- RENDER -------------------
-function renderPlayers(players){
-  playersDiv.innerHTML='';
-  players.forEach((p,i)=>{
-    const div=document.createElement('div');
-    div.className='player'+(i==turn?' active':'');
-    div.innerHTML=`${p.name}<div class="count">${p.hand.length} cards</div>`;
-    playersDiv.appendChild(div);
-  });
+// Helpers
+function randCard(){
+  const r=Math.random();
+  if(r<0.1) return {wild:"Wild"};
+  if(r<0.15) return {wild:"Wild_DrawFour"};
+  if(r<0.35) return {color:colors[Math.floor(Math.random()*4)], special:specials[Math.floor(Math.random()*3)]};
+  return {color:colors[Math.floor(Math.random()*4)], num:Math.floor(Math.random()*10)};
+}
+function getCardURL(c){
+  if(c.wild) return baseURL+c.wild+".png";
+  if(c.special) return baseURL+c.color+"_"+c.special+".png";
+  return baseURL+c.color+"_"+c.num+".png";
+}
+function playSound(type){
+  if(type==="play") sndPlay.play();
+  if(type==="draw") sndDraw.play();
+  if(type==="uno") sndUNO.play();
 }
 
-function renderHand(){
-  handDiv.innerHTML='';
-  const fanned=fannedHand(hand);
-  fanned.forEach((obj,i)=>{
-    const img=document.createElement('img');
-    img.src=getCardURL(obj.card);
-    img.className='card';
-    img.style.left=obj.left+'px';
-    img.onclick=()=>playCard(i);
-    handDiv.appendChild(img);
-  });
-}
-
-function renderPile(){ pileDiv.innerHTML='<img src="https://upload.wikimedia.org/wikipedia/commons/5/5a/UNO_card_back.png" class="card">'; }
-function renderDiscard(){ discardDiv.innerHTML=''; if(discardPile.length==0) return; const top=discardPile[discardPile.length-1]; const img=document.createElement('img'); img.src=getCardURL(top); img.className='card'; discardDiv.appendChild(img); }
-
-// ------------------- PLAY CARD -------------------
-function playCard(idx){
-  const card=hand[idx];
-  hand.splice(idx,1);
-  discardPile.push(card);
-  animateCardToDiscard(idx,card);
-  checkWin();
-  nextTurn(card);
-}
-
-// ------------------- ANIMATION -------------------
-function animateCardToDiscard(idx,card){
-  const imgs=handDiv.getElementsByTagName('img');
-  const img=imgs[idx];
-  const rect=discardDiv.getBoundingClientRect();
-  const handRect=img.getBoundingClientRect();
-  const dx=rect.left-handRect.left;
-  const dy=rect.top-handRect.top;
-  img.style.transition='transform 0.5s';
-  img.style.transform=`translate(${dx}px,${dy}px) rotate(20deg)`;
-  setTimeout(()=>{ renderHand(); renderDiscard(); playSound.play(); },500);
-}
-
-// ------------------- TURN LOGIC -------------------
-function nextTurn(card){
-  if(card.special==='reverse') direction*=-1;
-  turn=(turn+direction+offlinePlayers.length)%offlinePlayers.length;
-  renderPlayers(offlinePlayers);
-}
-
-// ------------------- OFFLINE START -------------------
+// Offline CPU
 function startOffline(){
-  isOffline=true; joinBox.style.display='none'; gameArea.style.display='block';
-  offlinePlayers=[];
-  const names=prompt("Enter player names separated by comma:","Player1,Player2,Player3").split(",");
-  names.forEach(n=>offlinePlayers.push({name:n.trim(),hand:[]}));  
-  offlinePlayers.forEach(p=>{ for(let i=0;i<7;i++) p.hand.push(randomCard()); });
-  hand=offlinePlayers[offlineTurn].hand;
-  pile=[...Array(50)].map(()=>randomCard());
-  discardPile=[pile.pop()];
-  renderPlayers(offlinePlayers); renderHand(); renderPile(); renderDiscard();
+  joinBox.style.display="none"; gameArea.style.display="block";
+  const names=prompt("Names (comma separated)","You,CPU1,CPU2,CPU3").split(",");
+  players={}; names.forEach((n,i)=>{
+    players[i]={name:n.trim(),hand:[],score:0,badges:{},avatar:avatars[i]};
+    for(let j=0;j<7;j++) players[i].hand.push(randCard());
+  });
+  hand=players[0].hand;
+  pile=[...Array(60)].map(randCard); discard=[pile.pop()];
+  render(); setTimeout(cpuPlay,1000);
+}
+function cpuPlay(){
+  if(!isOffline) return;
+  const ids=Object.keys(players);
+  const p=players[turn];
+  if(p===players[0]) return;
+  const playable=p.hand.findIndex(canPlay);
+  if(playable>=0){
+    const card=p.hand.splice(playable,1)[0]; discard.push(card);
+    if(card.special==="Skip") nextTurn(2);
+    else if(card.special==="Reverse"){ dir*=-1; nextTurn(1); }
+    else if(card.special==="DrawTwo"){ mustDraw+=2; nextTurn(1); }
+    else if(card.wild==="Wild_DrawFour"){ mustDraw+=4; nextTurn(1); }
+    else nextTurn(1); render();
+  } else { p.hand.push(pile.pop()); nextTurn(1); render(); }
+  if(hand.length===0) endRound();
+  setTimeout(cpuPlay,1000);
 }
 
-// ------------------- CHAT -------------------
-function sendMsg(){
-  const msg=msgInput.value;
-  if(!msg) return;
-  chatBox.innerHTML+=`<div><b>${offlinePlayers[offlineTurn].name}:</b> ${msg}</div>`;
-  msgInput.value='';
-  chatBox.scrollTop=chatBox.scrollHeight;
+// Multiplayer
+function startOnline(){
+  isOffline=false;
+  const name=nameInput.value||"Player";
+  const room=roomInput.value||Math.random().toString(36).slice(2,7);
+  joinBox.style.display="none"; gameArea.style.display="block";
+  roomRef=db.ref("rooms/"+room); myId=roomRef.push().key;
+  roomRef.child("players/"+myId).set({name,hand:[],score:0,badges:{},avatar:avatars[Math.floor(Math.random()*10)]});
+  roomRef.on("value", snap=>{
+    const d=snap.val(); if(!d) return;
+    players=d.players||{};
+    turn=d.turn||0; dir=d.dir||1; mustDraw=d.mustDraw||0;
+    discard=d.discard||discard;
+    render();
+  });
+  roomRef.child("chat").on("child_added",snap=>{
+    const m=snap.val();
+    chatBox.innerHTML+=`<div><b>${m.name}:</b> ${m.msg}</div>`;
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
 }
 
-// ------------------- WIN CHECK -------------------
-function checkWin(){
-  if(hand.length===0){
-    winSound.play();
-    const msg=document.createElement('div'); msg.className='special-msg';
-    msg.innerText='🎉 You win! 🎉';
-    gameArea.appendChild(msg);
-    confetti({particleCount:200,spread:100});
+// Rendering
+function render(){
+  const ids=Object.keys(players);
+  document.getElementById("topPlayers").innerHTML="";
+  document.getElementById("leftPlayers").innerHTML="";
+  document.getElementById("rightPlayers").innerHTML="";
+  ids.forEach((id,i)=>{
+    const p=players[id]; const el=document.createElement("div");
+    el.className="table-player"; if(i===turn) el.classList.add("active");
+    el.innerHTML=`<img src="${p.avatar || avatars[i%10]}"><br>${p.name}<br>🃏 ${p.hand.length}`;
+    if(i<3) document.getElementById("topPlayers").appendChild(el);
+    else if(i<6) document.getElementById("leftPlayers").appendChild(el);
+    else document.getElementById("rightPlayers").appendChild(el);
+  });
+  const angleStep=15;
+  handDiv.innerHTML=hand.map((c,i)=>{
+    const angle=(i-(hand.length-1)/2)*angleStep;
+    return `<img class="card fan" src="${getCardURL(c)}" style="transform: rotate(${angle}deg)" onclick="playCard(${i})">`;
+  }).join("");
+  pileDiv.innerHTML=`<img src="https://upload.wikimedia.org/wikipedia/commons/5/5a/UNO_card_back.png">`;
+  discardDiv.innerHTML=discard.length ? `<img src="${getCardURL(discard.at(-1))}">` : "";
+  scoreboard.innerHTML=ids.map(id=>`${players[id].name}: ${players[id].score} pts`).join("<br>");
+  const me = players[myId]; if(me?.badges) badgesDiv.innerHTML=Object.keys(me.badges).map(b=>`🏅 ${b}`).join("<br>");
+}
+
+// Rounds and Score
+function resetRound(){
+  const ids=Object.keys(players);
+  ids.forEach(id=>{ players[id].hand=[]; for(let j=0;j<7;j++) players[id].hand.push(randCard()); });
+  hand=players[myId]?.hand || [];
+  pile=[...Array(60)].map(randCard); discard=[pile.pop()];
+  turn=0; dir=1; mustDraw=0; unoCalled=false;
+  render();
+  if(!isOffline && roomRef) roomRef.update({players,turn,dir,mustDraw,discard});
+  if(isOffline) setTimeout(cpuPlay,1000);
+}
+
+function endRound(){
+  confetti({particleCount:200,spread:100});
+  const ids=Object.keys(players);
+  let winnerId=null;
+  ids.forEach(id=>{ if(players[id].hand.length===0) winnerId=id; });
+  if(winnerId!==null){
+    ids.forEach(id=>{ if(id!==winnerId) players[winnerId].score+=players[id].hand.length; });
+    render(); if(!isOffline && roomRef) roomRef.update({players});
+    checkWinner();
+    setTimeout(resetRound,1000);
   }
 }
+
+function checkWinner(){
+  const ids=Object.keys(players);
+  ids.forEach(id=>{
+    if(players[id].score>=winningScore){
+      alert(`${players[id].name} WINS THE GAME!`);
+      ids.forEach(pid=>{ players[pid].score=0; players[pid].badges={}; });
+      resetRound();
+    }
+  });
+}
+
+// Game rules & actions
+function canPlay(card){
+  const top=discard.at(-1);
+  if(card.wild) return true;
+  if(top.wildColor) return card.color===top.wildColor;
+  return card.color===top.color || card.num===top.num || card.special===top.special;
+}
+
+function playCard(i){
+  const card=hand[i];
+  if(!canPlay(card)){ alert("Can't play this card"); return; }
+  const img=document.querySelectorAll(".hand img")[i];
+  img.style.transform="translateY(-100px) rotate(20deg)";
+  setTimeout(()=>{ hand.splice(i,1); discard.push(card); render(); },300);
+  playSound("play");
+  if(hand.length===1 && !unoCalled){ drawPenalty(2); alert("UNO penalty! Draw 2"); }
+  unoCalled=false;
+  if(card.special==="Skip") nextTurn(2);
+  else if(card.special==="Reverse"){ dir*=-1; nextTurn(1); }
+  else if(card.special==="DrawTwo"){ mustDraw+=2; nextTurn(1); }
+  else if(card.wild==="Wild_DrawFour"){ mustDraw+=4; showWild(); }
+  else if(card.wild){ showWild(); }
+  else nextTurn(1);
+  if(hand.length===0) endRound();
+  render();
+  if(!isOffline && roomRef) roomRef.update({players,turn,dir,mustDraw,discard});
+}
+
+function nextTurn(step=1){ const ids=Object.keys(players); turn=(turn+dir*step+ids.length)%ids.length; }
+function drawCard(){ if(pile.length===0) reshufflePile(); if(mustDraw>0){ for(let i=0;i<mustDraw;i++) hand.push(pile.pop()); mustDraw=0; nextTurn(1); } else { hand.push(pile.pop()); playSound("draw"); } render(); }
+function reshufflePile(){ if(discard.length<=1) return; const top=discard.pop(); pile=discard.splice(0).sort(()=>Math.random()-0.5); discard=[top]; }
+function showWild(){ document.getElementById("wildPicker").style.display="flex"; }
+function pickColor(c){ discard.at(-1).wildColor=c; document.getElementById("wildPicker").style.display="none"; nextTurn(1); render(); if(!isOffline && roomRef) roomRef.update({turn,dir,mustDraw,discard}); }
+function callUNO(){ const el=document.createElement("div"); el.className="joinMsg"; el.innerText="UNO!"; const playerEl=document.querySelectorAll(".table-player")[0]; const rect=playerEl.getBoundingClientRect(); el.style.position="absolute"; el.style.left=rect.left+"px"; el.style.top=(rect.top-30)+"px"; el.style.fontSize="24px"; el.style.color="#ff0"; document.body.appendChild(el); playSound("uno"); unoCalled=true; setTimeout(()=>el.remove(),1000); }
+function drawPenalty(n){ for(let i=0;i<n;i++){ if(pile.length===0) reshufflePile(); hand.push(pile.pop()); } }
+
+// Chat
+function sendMsg(){ if(!msgInput.value.trim()) return; if(roomRef) roomRef.child("chat").push({name:players[myId]?.name||"Player",msg:msgInput.value,t:Date.now()}); else chatBox.innerHTML+=`<div><b>You:</b> ${msgInput.value}</div>`; msgInput.value=""; }
 </script>
 </body>
-  </html>
+      </html>
