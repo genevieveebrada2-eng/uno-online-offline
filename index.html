@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UNO – Multiplayer</title>
+<style>
+body { font-family: Arial,sans-serif; background:#2c3e50; color:white; text-align:center; margin:0; padding:0; }
+.container { max-width:1200px; margin:auto; padding:10px; }
+h1 { color:#e74c3c; }
+#gameArea { display:none; margin-top:20px; }
+#players { display:flex; justify-content:space-around; flex-wrap:wrap; margin-bottom:10px; }
+.player { background:#34495e; padding:10px; border-radius:10px; min-width:120px; }
+.hand { display:flex; justify-content:center; margin-top:10px; flex-wrap:wrap; }
+.card { width:60px; height:90px; margin:2px; cursor:pointer; transition:transform 0.3s; }
+.card:hover { transform:scale(1.2) rotate(10deg); }
+#pile, #discard { width:60px; height:90px; margin:5px; display:inline-block; vertical-align:top; }
+#controls { margin-top:20px; }
+#chatBox { height:150px; overflow-y:auto; background:#ecf0f1; color:black; padding:5px; border-radius:5px; text-align:left; }
+#msgInput { width:70%; padding:5px; border-radius:5px; border:none; }
+#sendBtn { padding:5px 10px; border-radius:5px; border:none; background:#e74c3c; color:white; cursor:pointer; }
+.special-msg { font-size:24px; font-weight:bold; color:#ff69b4; position:absolute; width:100%; top:50px; left:0; animation:fadeOut 3s forwards; }
+@keyframes fadeOut { 0%{opacity:1;}100%{opacity:0;} }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>UNO – Online & Offline Multiplayer</h1>
+
+<div id="joinBox">
+<input id="nameInput" placeholder="Your name"><br><br>
+<input id="roomInput" placeholder="Room code (online only)"><br><br>
+<button onclick="startOnline()">Join Online Room</button>
+<button onclick="startOffline()">Play Offline</button>
+</div>
+
+<div id="gameArea">
+<div id="players"></div>
+<div>
+<div id="pile"></div>
+<div id="discard"></div>
+</div>
+<div class="hand" id="hand"></div>
+<div id="controls">
+<input id="msgInput" placeholder="Chat...">
+<button id="sendBtn" onclick="sendMsg()">Send</button>
+<div id="chatBox"></div>
+</div>
+</div>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<script>
+// ------------------- CONFIG -------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyBna-Ul3PbjkDrUtFtTU3rDaCl4PVnw4Mg",
+  authDomain: "uno-multiplayer-e7d24.firebaseapp.com",
+  projectId: "uno-multiplayer-e7d24",
+  storageBucket: "uno-multiplayer-e7d24.firebasestorage.app",
+  messagingSenderId: "120283872563",
+  appId: "1:120283872563:web:dc997346aa083f29c81246"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ------------------- VARIABLES -------------------
+let isOffline=false;
+let roomCode, playerName, playerId;
+let hand=[], pile=[], discardPile=[], turn=0, direction=1;
+let offlinePlayers=[], offlineTurn=0;
+const maxPlayers=10;
+
+// ------------------- UNO CARDS -------------------
+const colors = ['Red','Green','Blue','Yellow'];
+const numbers = [...Array(10).keys()]; // 0-9
+const specials = ['Skip','Reverse','DrawTwo'];
+const wilds = ['Wild','Wild_DrawFour'];
+const cardURLs = {};
+const baseURL = 'https://raw.githubusercontent.com/john-costanzo/uno-card-images/master/';
+
+// Number cards
+colors.forEach(c => {
+  numbers.forEach(n => {
+    cardURLs[`${c.toLowerCase()}_${n}`] = `${baseURL}${c}_${n}.png`;
+  });
+});
+
+// Special cards
+colors.forEach(c => {
+  specials.forEach(s => {
+    cardURLs[`${c.toLowerCase()}_${s.toLowerCase()}`] = `${baseURL}${c}_${s}.png`;
+  });
+});
+
+// Wild cards
+wilds.forEach(w => {
+  cardURLs[w.toLowerCase()] = `${baseURL}${w}.png`;
+});
+
+// ------------------- DOM -------------------
+const joinBox=document.getElementById('joinBox');
+const gameArea=document.getElementById('gameArea');
+const playersDiv=document.getElementById('players');
+const handDiv=document.getElementById('hand');
+const pileDiv=document.getElementById('pile');
+const discardDiv=document.getElementById('discard');
+const chatBox=document.getElementById('chatBox');
+const msgInput=document.getElementById('msgInput');
+
+// ------------------- SOUNDS -------------------
+const playSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-retro-game-notification-212.mp3');
+const winSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
+
+// ------------------- ONLINE -------------------
+function startOnline(){
+  isOffline=false;
+  playerName=document.getElementById('nameInput').value||'Player';
+  roomCode=document.getElementById('roomInput').value||'room-'+Date.now();
+  firebase.auth().signInAnonymously().then(()=>{
+    playerId=firebase.auth().currentUser.uid;
+    db.ref('rooms/'+roomCode+'/players/'+playerId).set({name:playerName,hand:[],online:true});
+    joinBox.style.display='none';
+    gameArea.style.display='block';
+    listenRoom();
+  });
+}
+
+function listenRoom(){
+  db.ref('rooms/'+roomCode).on('value',snap=>{
+    const data=snap.val();
+    if(!data) return;
+    const players=Object.values(data.players||{});
+    renderPlayers(players);
+    updateHand(players.find(p=>p.name===playerName)?.hand||[]);
+    renderDiscard(data.discardPile||[]);
+    renderPile(data.pile||[]);
+    renderChat(data.chat||{});
+  });
+}
+
+// ------------------- OFFLINE -------------------
+function startOffline(){
+  isOffline=true;
+  joinBox.style.display='none';
+  gameArea.style.display='block';
+  offlinePlayers=[];
+  const names=prompt("Enter player names separated by comma:","Player1,Player2,Player3").split(",");
+  names.forEach(n=>offlinePlayers.push({name:n.trim(),hand:[]}));  
+  dealOffline();
+  renderPlayers(offlinePlayers);
+  renderHand();
+}
+
+// ------------------- CARD HELPERS -------------------
+function randomCard(){
+  const color=colors[Math.floor(Math.random()*4)];
+  const num=numbers[Math.floor(Math.random()*10)];
+  return {type:'number',color,num};
+}
+function getCardURL(card){
+  if(!card) return '';
+  if(card.type==='wild') return cardURLs[card.wild.toLowerCase()];
+  return cardURLs[card.color.toLowerCase()+'_'+(card.type==='number'?card.num:card.special.toLowerCase())]||'';
+}
+
+// ------------------- RENDER -------------------
+function renderPlayers(players){
+  playersDiv.innerHTML='';
+  players.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='player';
+    div.innerText=p.name+(i==turn?' 🔹':'');
+    playersDiv.appendChild(div);
+  });
+}
+
+function updateHand(cards){ hand=cards; renderHand(); }
+function renderHand(){
+  handDiv.innerHTML='';
+  hand.forEach((card,i)=>{
+    const img=document.createElement('img');
+    img.src=getCardURL(card);
+    img.className='card';
+    img.onclick=()=>playCard(i);
+    handDiv.appendChild(img);
+  });
+}
+
+function renderPile(cards){
+  pileDiv.innerHTML='<img src="https://upload.wikimedia.org/wikipedia/commons/5/5a/UNO_card_back.png" class="card">';
+}
+
+function renderDiscard(cards){
+  discardDiv.innerHTML='';
+  if(cards.length==0) return;
+  const top=cards[cards.length-1];
+  const img=document.createElement('img');
+  img.src=getCardURL(top);
+  img.className='card';
+  discardDiv.appendChild(img);
+}
+
+function renderChat(chat){
+  chatBox.innerHTML='';
+  Object.values(chat||{}).forEach(c=>{
+    chatBox.innerHTML+=`<div><b>${c.player}:</b> ${c.msg}</div>`;
+  });
+  chatBox.scrollTop=chatBox.scrollHeight;
+}
+
+// ------------------- PLAY CARD -------------------
+function playCard(idx){
+  const card=hand[idx];
+  hand.splice(idx,1);
+  renderHand();
+  discardPile.push(card);
+  renderDiscard(discardPile);
+  confetti({particleCount:50, spread:70});
+  playSound.play();
+  checkWin();
+}
+
+// ------------------- OFFLINE DEAL -------------------
+function dealOffline(){
+  offlinePlayers.forEach(p=>{
+    for(let i=0;i<7;i++) p.hand.push(randomCard());
+    if(p.name===offlinePlayers[offlineTurn].name) hand=p.hand;
+  });
+  pile=[...Array(50)].map(()=>randomCard());
+  discardPile=[pile.pop()];
+  renderPile(pile);
+  renderDiscard(discardPile);
+}
+
+// ------------------- CHAT -------------------
+function sendMsg(){
+  const msg=msgInput.value;
+  if(!msg) return;
+  if(isOffline){
+    chatBox.innerHTML+=`<div><b>${offlinePlayers[offlineTurn].name}:</b> ${msg}</div>`;
+  } else {
+    db.ref('rooms/'+roomCode+'/chat').push({player:playerName,msg});
+  }
+  msgInput.value='';
+  chatBox.scrollTop=chatBox.scrollHeight;
+}
+
+// ------------------- WIN CHECK -------------------
+function checkWin(){
+  if(hand.length===0){
+    winSound.play();
+    const msg=document.createElement('div');
+    msg.className='special-msg';
+    msg.innerText='🎉 You win, baby! 🎉';
+    gameArea.appendChild(msg);
+    confetti({particleCount:200, spread:100});
+  }
+}
+</script>
+</body>
+</html>
